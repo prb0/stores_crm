@@ -1,0 +1,6 @@
+FROM php:8.2-cli
+
+RUN apt-get update && apt-get install -y  libcurl4-gnutls-dev \
+	&& docker-php-ext-install curl bcmath \
+	&& apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
