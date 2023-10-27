@@ -79,7 +79,13 @@ services:
     user: $UID
     volumes:
       - ./projects/crm:/crm
-    command: composer install
+    command:
+      - /bin/sh
+      - -c
+      - |
+        composer install
+        php artisan key:generate
+        php artisan migrate
     environment:
       - HOME=/home/composer
     working_dir: /crm
@@ -89,7 +95,14 @@ services:
     user: $UID
     volumes:
       - ./projects/online_store:/online_store
-    command: composer install
+
+    command:
+      - /bin/sh
+      - -c
+      - |
+        composer install
+        php artisan key:generate
+        php artisan migrate
     environment:
       - HOME=/home/composer
     working_dir: /online_store
