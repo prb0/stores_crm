@@ -1,167 +1,121 @@
 version: '3.7'
 
 services:
-  nginx:
-    build:
-      context: .
-      dockerfile: docker/nginx/Dockerfile
-    ports:
-      - "8080-8099:80-99"
-    volumes:
-      - ./docker/config/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./projects/online_store:/var/www/html/online_store/:z
-      - ./projects/crm:/var/www/html/crm/:z
-    depends_on:
-      - online_store
-      - crm
-    networks:
-      - project
+    nginx:
+        build:
+            context: .
+            dockerfile: docker/nginx/Dockerfile
+        ports:
+            - "8080-8099:80-99"
+        volumes:
+            - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+            - ./projects/online_store:/var/www/html/online_store/:z
+            - ./projects/crm:/var/www/html/crm/:z
+        depends_on:
+            - online_store
+            - crm
+        networks:
+            - project
 
-  online_store:
-    build:
-      context: .
-      dockerfile: docker/php/online_store/Dockerfile
-    user: $UID
-    volumes:
-      - ./docker/config/online_store/php.ini:/usr/local/etc/php/php.ini
-      - ./projects/online_store:/var/www/html/online_store/:z
-    depends_on:
-      - rabbitmq
-      - mysql_online_store
-      - composer_online_store
-    links:
-      - rabbitmq
-    networks:
-      - project
+    online_store:
+        build:
+            context: .
+            dockerfile: docker/php/online_store/Dockerfile
+        volumes:
+            - ./docker/php/online_store/php.ini:/usr/local/etc/php/php.ini
+            - ./projects/online_store:/var/www/html/online_store/:z
+        depends_on:
+            mysql_online_store:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+        links:
+            - rabbitmq
+        networks:
+            - project
 
-  crm:
-    build:
-      context: .
-      dockerfile: docker/php/crm/Dockerfile
-    user: $UID
-    volumes:
-      - ./docker/config/crm/php.ini:/usr/local/etc/php/php.ini
-      - ./projects/crm:/var/www/html/crm/:z
-    depends_on:
-      mysql_crm:
-        condition: service_started
-      composer_crm:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
-    links:
-      - rabbitmq
-    deploy:
-      replicas: 1
-    networks:
-      - project
+    crm:
+        build:
+            context: .
+            dockerfile: docker/php/crm/Dockerfile
+        volumes:
+            - ./docker/php/crm/php.ini:/usr/local/etc/php/php.ini
+            - ./projects/crm:/var/www/html/crm/:z
+        depends_on:
+            mysql_crm:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+        links:
+            - rabbitmq
+        deploy:
+            replicas: 1
+        networks:
+            - project
 
-#https://stackoverflow.com/questions/31746182/docker-compose-wait-for-container-x-before-starting-y
-  rabbitmq:
-    build:
-      context: .
-      dockerfile: docker/rabbitmq/Dockerfile
-    ports:
-      - "15672:15672"
-      - "5672:5672"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:15672"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    networks:
-      - project
+    #https://stackoverflow.com/questions/31746182/docker-compose-wait-for-container-x-before-starting-y
+    rabbitmq:
+        build:
+            context: .
+            dockerfile: docker/rabbitmq/Dockerfile
+        ports:
+            - "15672:15672"
+            - "5672:5672"
+        healthcheck:
+            test: [ "CMD", "curl", "-f", "http://localhost:15672" ]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+        volumes:
+            - rabbitmq-data:/var/lib/rabbitmq
+        networks:
+            - project
 
-  composer_crm:
-    build: docker/composer
-    user: $UID
-    volumes:
-      - ./projects/crm:/crm
-    command:
-      - /bin/sh
-      - -c
-      - |
-        composer install
-        php artisan key:generate
-        php artisan migrate
-    environment:
-      - HOME=/home/composer
-    working_dir: /crm
+    mysql_crm:
+        image: 'mysql/mysql-server:8.0'
+        environment:
+            MYSQL_ROOT_HOST: '%'
+            MYSQL_ROOT_PASSWORD: '${DB_ROOT_PASSWORD}'
+        volumes:
+            - 'mysql_crm:/var/lib/mysql'
+            - ./docker/provision/mysql/init:/docker-entrypoint-initdb.d
+        networks:
+            - project
+        healthcheck:
+            test:
+                - CMD
+                - mysqladmin
+                - ping
+                - '-p${DB_ROOT_PASSWORD}'
+            retries: 3
+            timeout: 5s
 
-  composer_online_store:
-    build: docker/composer
-    user: $UID
-    volumes:
-      - ./projects/online_store:/online_store
-
-    command:
-      - /bin/sh
-      - -c
-      - |
-        composer install
-        php artisan key:generate
-        php artisan migrate
-    environment:
-      - HOME=/home/composer
-    working_dir: /online_store
-
-  mysql_crm:
-    image: 'mysql/mysql-server:8.0'
-    ports:
-        - '${FORWARD_DB_PORT:-3306}:3306'
-    environment:
-        MYSQL_ROOT_PASSWORD: '${DB_CRM_PASSWORD}'
-        MYSQL_ROOT_HOST: '%'
-        MYSQL_DATABASE: '${DB_CRM_DATABASE}'
-        MYSQL_USER: '${DB_CRM_USERNAME}'
-        MYSQL_PASSWORD: '${DB_CRM_PASSWORD}'
-        MYSQL_ALLOW_EMPTY_PASSWORD: 1
-    volumes:
-        - 'mysql_crm:/var/lib/mysql'
-    networks:
-        - project
-    healthcheck:
-        test:
-            - CMD
-            - mysqladmin
-            - ping
-            - '-p${DB_CRM_PASSWORD}'
-        retries: 3
-        timeout: 5s
-
-  mysql_online_store:
-    image: 'mysql/mysql-server:8.0'
-    ports:
-        - '${FORWARD_DB_PORT:-3307}:3306'
-    environment:
-        MYSQL_ROOT_PASSWORD: '${DB_OS_PASSWORD}'
-        MYSQL_ROOT_HOST: '%'
-        MYSQL_DATABASE: '${DB_OS_DATABASE}'
-        MYSQL_USER: '${DB_OS_USERNAME}'
-        MYSQL_PASSWORD: '${DB_OS_PASSWORD}'
-        MYSQL_ALLOW_EMPTY_PASSWORD: 1
-    volumes:
-        - 'mysql_online_store:/var/lib/mysql'
-    networks:
-        - project
-    healthcheck:
-        test:
-            - CMD
-            - mysqladmin
-            - ping
-            - '-p${DB_OS_PASSWORD}'
-        retries: 3
-        timeout: 5s
+    mysql_online_store:
+        image: 'mysql/mysql-server:8.0'
+        environment:
+            MYSQL_ROOT_HOST: '%'
+            MYSQL_ROOT_PASSWORD: '${DB_ROOT_PASSWORD}'
+        volumes:
+            - 'mysql_online_store:/var/lib/mysql'
+            - ./docker/provision/mysql/init:/docker-entrypoint-initdb.d
+        networks:
+            - project
+        healthcheck:
+            test:
+                - CMD
+                - mysqladmin
+                - ping
+                - '-p${DB_ROOT_PASSWORD}'
+            retries: 3
+            timeout: 5s
 
 networks:
-  project:
-    driver: bridge
+    project:
+        driver: bridge
 
 volumes:
-  rabbitmq-data:
-  mysql_online_store:
-    driver: local
-  mysql_crm:
-    driver: local
+    rabbitmq-data:
+    mysql_crm:
+        driver: local
+    mysql_online_store:
+        driver: local
