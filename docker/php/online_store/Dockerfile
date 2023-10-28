@@ -18,5 +18,7 @@ WORKDIR /var/www/html/online_store
 RUN mkdir -p /home/composer && chmod 777 /home/composer
 
 COPY ./docker/php/online_store/entrypoint.sh /entrypoint.sh
+
 RUN chmod +x /entrypoint.sh
+
 ENTRYPOINT ["/entrypoint.sh"]

@@ -18,5 +18,7 @@ WORKDIR /var/www/html/crm
 RUN mkdir -p /home/composer && chmod 777 /home/composer
 
 COPY ./docker/php/crm/entrypoint.sh /entrypoint.sh
+
 RUN chmod +x /entrypoint.sh
+
 ENTRYPOINT ["/entrypoint.sh"]
